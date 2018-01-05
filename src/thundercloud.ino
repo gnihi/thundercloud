@@ -13,11 +13,10 @@ boolean BUTTON_INPUT = 0;
 int MICRO_INPUT = 0;
 
 // MISC
-int CLOUD_MODE = 0;   // 0 = All on; 1 = Thunder blue; 2 = Thunder orange; 3 = Party
-int COUNTER = 0;
+int CLOUD_MODE = 1;   // 0 = All on; 1 = Thunder blue; 2 = Thunder orange; 3 = Party
 const int NUM_LEDS = 75;
 const int CLOUD_MODE_MAX = 4;
-const double MICRO_THRESHOLD_MIN = 0.10;
+const double MICRO_THRESHOLD_MIN = 0.30;
 const double MICRO_THRESHOLD_MAX = 0.70;
 const double LED_INTENSITY_MIN = 0.30;
 const double LED_INTENSITY_MAX = 1.00;
@@ -61,12 +60,13 @@ void loop() {
     if (CLOUD_MODE >= CLOUD_MODE_MAX) {
       CLOUD_MODE = 0;
     }
-    delay(1000);
+    delay(500);
   }
 
   // -----------------------------------------------
   unsigned long startMillis = millis(); // Start of sample window
   unsigned int peakToPeak = 0;   // peak-to-peak level
+  double intensity = 0;
 
   unsigned int signalMax = 0;
   unsigned int signalMin = 1024;
@@ -84,7 +84,16 @@ void loop() {
     }
   }
   peakToPeak = signalMax - signalMin;  // max - min = peak-peak amplitude
-  double intensity = (peakToPeak * 5.0) / 1024;  // convert to volts
+  intensity = ((peakToPeak * 5.0) / 1024);  // convert to volts
+
+   // -----------------------------------------------
+
+  getItOn(intensity);
+}
+
+ // -----------------------------------------------
+
+void getItOn(double intensity){
 
   // -----------------------------------------------
   // ALL ON
@@ -95,19 +104,19 @@ void loop() {
   // -----------------------------------------------
   // THUNDER BLUE = 1 / ORANGE = 2
   if (CLOUD_MODE == 1 || CLOUD_MODE == 2) {
-    COUNTER++;
+      Serial.print(intensity, 3);
+      Serial.print(" - ");
+      Serial.print(intensity > MICRO_THRESHOLD_MIN);
+      Serial.print(" - ");
+      Serial.println(MICRO_THRESHOLD_MIN);
 
-    // if (COUNTER == 32000) {
-    COUNTER = 0;
+      if (intensity > MICRO_THRESHOLD_MIN) {
+        int led = random(NUM_LEDS);
 
-    if (intensity > MICRO_THRESHOLD_MIN) {
-
-      int led = random(NUM_LEDS);
-      for (int i = 0; i < 10; i++) {
-        lightningStrike(random(NUM_LEDS), intensity);
+        for (int i = 0; i < 10; i++) {
+          lightningStrike(random(NUM_LEDS), intensity);
+        }
       }
-    }
-    // }
   }
 
   // -----------------------------------------------
@@ -115,11 +124,13 @@ void loop() {
   if (CLOUD_MODE == 3) {
     lightningStrike(random(NUM_LEDS), random(0, 1));
   }
+
+  delay(150);
 }
 
 // -------------------------------------------------
 
-void lightningStrike(int pixel, float intensity) {
+void lightningStrike(int pixel, double intensity) {
 
   int rColor = 255;
   int gColor = 255;
@@ -137,15 +148,9 @@ void lightningStrike(int pixel, float intensity) {
     bColor = random(0, 255);
   }
 
-  intensity;  // 0.5
-  MICRO_THRESHOLD_MAX;  // 0.7
-  MICRO_THRESHOLD_MIN;  // 0.3
   double tmpMax = MICRO_THRESHOLD_MAX - MICRO_THRESHOLD_MIN;
   double tmpCur = intensity - MICRO_THRESHOLD_MIN;
-  double percent = tmpCur / tmpMax;
-
-  LED_INTENSITY_MAX;  // 1
-  LED_INTENSITY_MIN;  // 0.2
+  double percent = 0 / tmpMax;
   double tmpLedMax = LED_INTENSITY_MAX - LED_INTENSITY_MIN;
   double newLedIntensity = (tmpLedMax * percent) + LED_INTENSITY_MIN;
 
@@ -155,7 +160,7 @@ void lightningStrike(int pixel, float intensity) {
 
   strip.setPixelColor(pixel, strip.Color(newRColor, newGColor, newBColor));
   strip.show();
-  delay(random(100, 1000));
+  // delay(random(100, 1000));
 
   turnAllPixelsOff();
 }
@@ -177,5 +182,4 @@ void turnAllPixelsOff() {
   }
   strip.show();
 }
-
 
