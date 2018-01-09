@@ -20,7 +20,7 @@ double MIN_INTENSITY = 0.1;             // Min output intensity
 double MAX_INTENSITY = 1.0;             // Max output intensity
 
 // MISC
-int CLOUD_MODE = 2;                     // 0 = All on; 1 = Thunder color 1; 2 = Thunder color 2; 3 = Party
+int CLOUD_MODE = 0;                     // 0 = All on; 1 = Thunder color 1; 2 = Thunder color 2; 3 = Party
 int CLOUD_MODE_MAX = 4;                 // Max number of modes
 
 int COUNTER = 0;                        // Counter for decreasing max value
@@ -95,7 +95,8 @@ void run(int microSignal) {
 
   // All pixels on
   if (CLOUD_MODE == 0) {
-    turnAllPixelsOn();
+    long color[3] = {255, 225, 220};
+    turnAllPixelsOn(color);
   }
 
   // Color mode 1
@@ -109,7 +110,7 @@ void run(int microSignal) {
   // Color mode 2
   else if (CLOUD_MODE == 2) {
     if (signalIntensity > THRESHOLD) {
-      long color[3] = {0, 153, 255};
+      long color[3] = {0, 50, 255};
       lightningStrike(random(NUM_LEDS), getLedIntensity(microSignal), color);
     }
   }
@@ -208,12 +209,12 @@ void lightningStrike(int pixel, double intensity, long color[]) {
 
   // Create color from intensity [r, g, b]
   int rColor = (int)(color[0] * intensity);
-  int gColor = (int)(color[2] * intensity);
-  int bColor = (int)(color[1] * intensity);
+  int gColor = (int)(color[1] * intensity);
+  int bColor = (int)(color[2] * intensity);
   
 
   // Light pixel
-  strip.setPixelColor(pixel, strip.Color(rColor, gColor, bColor));
+  strip.setPixelColor(pixel, strip.Color(rColor, bColor, gColor));
   strip.show();
 
   // Let it glow for some time
@@ -224,11 +225,16 @@ void lightningStrike(int pixel, double intensity, long color[]) {
 
 // -------------------------------------------------
 
-void turnAllPixelsOn() {
+void turnAllPixelsOn(long color[]) {
+  int rColor = (int)(color[0]);
+  int gColor = (int)(color[1]);
+  int bColor = (int)(color[2]);
+  
   for (int i = 0; i < NUM_LEDS; i++) {
-    strip.setPixelColor(i, 255, 255, 255);
+    strip.setPixelColor(i, rColor, bColor, gColor);
+    strip.show();
+    delay(50);
   }
-  strip.show();
 }
 
 // -------------------------------------------------
