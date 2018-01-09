@@ -131,10 +131,10 @@ void collectPeaks(int microSignal) {
   if (microSignal > INPUT_MAX_AVERAGE) {
 
     // Check if array index is greater than max input readings
-    if(INPUT_MAX_INDEX >= INPUT_READINGS){
+    if (INPUT_MAX_INDEX >= INPUT_READINGS) {
       INPUT_MAX_INDEX = 0;
     }
-    else{
+    else {
       INPUT_MAX_INDEX++;
     }
 
@@ -156,12 +156,12 @@ void collectPeaks(int microSignal) {
 
 // -------------------------------------------------
 
-double getSignalIntensity(int microSignal){
+double getSignalIntensity(int microSignal) {
   double peakToPeak = 0;
   double signalIntensity = 0; // peak-to-peak intensity in percent from 0-1
 
   // Slow down the micro signal on its peak
-  if(microSignal > INPUT_MAX_AVERAGE){
+  if (microSignal > INPUT_MAX_AVERAGE) {
     microSignal = INPUT_MAX_AVERAGE;
   }
 
@@ -173,17 +173,17 @@ double getSignalIntensity(int microSignal){
 
 // -------------------------------------------------
 
-double getLedIntensity(int microSignal){
+double getLedIntensity(int microSignal) {
   int max_input_last_readings = INPUT_MAX[0];
   int min_input_last_readings = INPUT_MAX[0];
 
   // Get highest and lowest value of last max reading
   for (int reading = 0; reading < INPUT_READINGS; reading++) {
-    if (max_input_last_readings < INPUT_MAX[reading]){
+    if (max_input_last_readings < INPUT_MAX[reading]) {
       max_input_last_readings = INPUT_MAX[reading];
     }
 
-    if (min_input_last_readings > INPUT_MAX[reading]){
+    if (min_input_last_readings > INPUT_MAX[reading]) {
       min_input_last_readings = INPUT_MAX[reading];
     }
   }
@@ -192,7 +192,7 @@ double getLedIntensity(int microSignal){
   int peakToPeakSignal = max_input_last_readings - min_input_last_readings;
 
   // If there are no values to calculate return min intensity
-  if(peakToPeakSignal == 0){
+  if (peakToPeakSignal == 0) {
     return MIN_INTENSITY;
   }
 
@@ -211,7 +211,6 @@ void lightningStrike(int pixel, double intensity, long color[]) {
   int rColor = (int)(color[0] * intensity);
   int gColor = (int)(color[1] * intensity);
   int bColor = (int)(color[2] * intensity);
-  
 
   // Light pixel
   strip.setPixelColor(pixel, strip.Color(rColor, bColor, gColor));
@@ -229,7 +228,7 @@ void turnAllPixelsOn(long color[]) {
   int rColor = (int)(color[0]);
   int gColor = (int)(color[1]);
   int bColor = (int)(color[2]);
-  
+
   for (int i = 0; i < NUM_LEDS; i++) {
     strip.setPixelColor(i, rColor, bColor, gColor);
     strip.show();
@@ -253,7 +252,7 @@ void normalizeInputMaxAverage() {
 
   for (int reading = 0; reading < INPUT_READINGS; reading++) {
     // Save index of the highest input max reading
-    if(INPUT_MAX[reading] > INPUT_MAX[maxReadingIndex]){
+    if (INPUT_MAX[reading] > INPUT_MAX[maxReadingIndex]) {
       maxReadingIndex = reading;
     }
   }
