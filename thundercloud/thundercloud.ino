@@ -14,10 +14,15 @@ int INPUT_MAX_INDEX = -1;               // The index of the current reading, -1 
 double INPUT_MAX_AVERAGE = 0;           // The average max input level
 int INPUT_MIN = 1024;
 
-// MISC
-int CLOUD_MODE = 1;                     // 0 = All on; 1 = Thunder blue; 2 = Thunder orange; 3 = Party
-int CLOUD_MODE_MAX = 4;                 // Max number of modes
+// LEDs
 int NUM_LEDS = 75;                      // Number of LEDs on the pixel stripe
+double MIN_INTENSITY = 0.1;             // Min output intensity
+double MAX_INTENSITY = 1.0;             // Max output intensity
+
+// MISC
+int CLOUD_MODE = 2;                     // 0 = All on; 1 = Thunder color 1; 2 = Thunder color 2; 3 = Party
+int CLOUD_MODE_MAX = 4;                 // Max number of modes
+
 int COUNTER = 0;                        // Counter for decreasing max value
 int INPUT_MAX_NORMALIZE_CHECK = 100;    // Time to check decrease input max value
 int LAST_STRIKE = 0;                    // Time of last lightning strike
@@ -74,34 +79,38 @@ void loop() {
     changeMode();
   }
 
+  // Collect signal min and max peaks
+  collectPeaks(microSignal);
+
   // Let's do some magic!
-  run(getIntensity(microSignal));
+  run(microSignal);
 
   delay(1); // delay in between reads for stability
 }
 
 // -------------------------------------------------
 
-void run(double intensity) {
+void run(int microSignal) {
+  double signalIntensity = getSignalIntensity(microSignal);
 
   // All pixels on
   if (CLOUD_MODE == 0) {
     turnAllPixelsOn();
   }
 
-  // Thunder blue mode
+  // Color mode 1
   else if (CLOUD_MODE == 1) {
-    if (intensity >= THRESHOLD) {
+    if (signalIntensity >= THRESHOLD) {
       long color[3] = {255, 255, 255};
-      lightningStrike(random(NUM_LEDS), intensity, color);
+      lightningStrike(random(NUM_LEDS), getLedIntensity(microSignal), color);
     }
   }
 
-  // Thunder purple mode
+  // Color mode 2
   else if (CLOUD_MODE == 2) {
-    if (intensity > THRESHOLD) {
-      long color[3] = {255, 69, 0};
-      lightningStrike(random(NUM_LEDS), intensity, color);
+    if (signalIntensity > THRESHOLD) {
+      long color[3] = {0, 153, 255};
+      lightningStrike(random(NUM_LEDS), getLedIntensity(microSignal), color);
     }
   }
 
@@ -115,30 +124,8 @@ void run(double intensity) {
 
 // -------------------------------------------------
 
-void lightningStrike(int pixel, double intensity, long color[]) {
-  LAST_STRIKE = COUNTER;
-
-  // Create color from intensity
-  int rColor = (int)(color[0] * intensity);
-  int gColor = (int)(color[1] * intensity);
-  int bColor = (int)(color[2] * intensity);
-
-  // Light pixel
-  strip.setPixelColor(pixel, strip.Color(rColor, gColor, bColor));
-  strip.show();
-
-  // Let it glow for some time
-  delay(random(0, 300));
-
-  turnAllPixelsOff();
-}
-
-// -------------------------------------------------
-
-double getIntensity(int microSignal) {
-  double peakToPeak = 0;
-  double peakToPeakPercent = 0; // peak-to-peak current in percent 0-1
-  double inputMaxSummed = 0;
+void collectPeaks(int microSignal) {
+  double maxSignalSummed = 0;
 
   if (microSignal > INPUT_MAX_AVERAGE) {
 
@@ -155,42 +142,102 @@ double getIntensity(int microSignal) {
 
     // Create new average input level max
     for (int reading = 0; reading < INPUT_READINGS; reading++) {
-      inputMaxSummed = inputMaxSummed + INPUT_MAX[reading];
+      maxSignalSummed = maxSignalSummed + INPUT_MAX[reading];
     }
 
     // Calculate the average reading
-    INPUT_MAX_AVERAGE = inputMaxSummed / INPUT_READINGS;
+    INPUT_MAX_AVERAGE = maxSignalSummed / INPUT_READINGS;
   }
   else if (microSignal < INPUT_MIN) {
     INPUT_MIN = microSignal;  // save just the min levels
   }
+}
 
-  // Slow down the micro signal on its peak. The high values is includes in the average max readings for the next calculation.
+// -------------------------------------------------
+
+double getSignalIntensity(int microSignal){
+  double peakToPeak = 0;
+  double signalIntensity = 0; // peak-to-peak intensity in percent from 0-1
+
+  // Slow down the micro signal on its peak
   if(microSignal > INPUT_MAX_AVERAGE){
     microSignal = INPUT_MAX_AVERAGE;
   }
 
   peakToPeak = INPUT_MAX_AVERAGE - INPUT_MIN;  // max - min = peak-peak amplitude
-  peakToPeakPercent = (microSignal - INPUT_MIN) / peakToPeak;
+  signalIntensity = (microSignal - INPUT_MIN) / peakToPeak;
 
-  return peakToPeakPercent;
+  return signalIntensity;
 }
 
 // -------------------------------------------------
 
-void changeMode() {
-  BUTTON_PRESSED = true;
-  CLOUD_MODE++;
+double getLedIntensity(int microSignal){
+  int max_input_last_readings = INPUT_MAX[0];
+  int min_input_last_readings = INPUT_MAX[0];
 
-  if (CLOUD_MODE >= CLOUD_MODE_MAX) {
-    CLOUD_MODE = 0;
+  // Get highest and lowest value of last max reading
+  for (int reading = 0; reading < INPUT_READINGS; reading++) {
+    if (max_input_last_readings < INPUT_MAX[reading]){
+      max_input_last_readings = INPUT_MAX[reading];
+    }
+
+    if (min_input_last_readings > INPUT_MAX[reading]){
+      min_input_last_readings = INPUT_MAX[reading];
+    }
   }
 
+  // Calculate signal within led intensity range
+  int peakToPeakSignal = max_input_last_readings - min_input_last_readings;
+
+  // If there are no values to calculate return min intensity
+  if(peakToPeakSignal == 0){
+    return MIN_INTENSITY;
+  }
+
+  double peakToPeakIntensity = MAX_INTENSITY - MIN_INTENSITY;
+  double signal = double(microSignal - min_input_last_readings) / peakToPeakSignal;
+
+  return signal * peakToPeakIntensity;
+}
+
+// -------------------------------------------------
+
+void lightningStrike(int pixel, double intensity, long color[]) {
+  LAST_STRIKE = COUNTER;
+
+  // Create color from intensity [r, g, b]
+  int rColor = (int)(color[0] * intensity);
+  int gColor = (int)(color[2] * intensity);
+  int bColor = (int)(color[1] * intensity);
+  
+
+  // Light pixel
+  strip.setPixelColor(pixel, strip.Color(rColor, gColor, bColor));
+  strip.show();
+
+  // Let it glow for some time
+  delay(random(100, 500));
+
   turnAllPixelsOff();
+}
 
-  delay(BUTTON_RELEASE);
+// -------------------------------------------------
 
-  BUTTON_PRESSED = false;
+void turnAllPixelsOn() {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    strip.setPixelColor(i, 255, 255, 255);
+  }
+  strip.show();
+}
+
+// -------------------------------------------------
+
+void turnAllPixelsOff() {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    strip.setPixelColor(i, 0);
+  }
+  strip.show();
 }
 
 // -------------------------------------------------
@@ -211,18 +258,17 @@ void normalizeInputMaxAverage() {
 
 // -------------------------------------------------
 
-void turnAllPixelsOn() {
-  for (int i = 0; i < NUM_LEDS; i++) {
-    strip.setPixelColor(i, 255, 255, 255);
-  }
-  strip.show();
-}
+void changeMode() {
+  BUTTON_PRESSED = true;
+  CLOUD_MODE++;
 
-// -------------------------------------------------
-
-void turnAllPixelsOff() {
-  for (int i = 0; i < NUM_LEDS; i++) {
-    strip.setPixelColor(i, 0);
+  if (CLOUD_MODE >= CLOUD_MODE_MAX) {
+    CLOUD_MODE = 0;
   }
-  strip.show();
+
+  turnAllPixelsOff();
+
+  delay(BUTTON_RELEASE);
+
+  BUTTON_PRESSED = false;
 }
