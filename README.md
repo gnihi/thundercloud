@@ -1,4 +1,4 @@
-## Thundercloud :cloud:
+## :cloud: Thundercloud :cloud:
 
 This is a guide to create a beautiful arduino based thundercloud with an external sound source to trigger lightning.
 
@@ -6,6 +6,7 @@ This is a guide to create a beautiful arduino based thundercloud with an externa
 ![thundercloud](img/thundercloud.gif)
 
 ---
+
 
 ## Breadboard and schematic
 
@@ -15,10 +16,12 @@ This is a guide to create a beautiful arduino based thundercloud with an externa
 
 ---
 
+
 ## BOM - Bill of material
 
 	This setup uses a 12v power supply to power a 12v led stipe!
 	If you want to use a 5v neopixel you can remove the step up converter of the shopping list. 
+
 
 - 1x micro controller 5v-12v
 	- [Arduino Nano](https://store.arduino.cc/arduino-nano) or something similar like the [Kuman Mini Nano](http://www.kumantech.com/kuman-mini-nano-v30-atmega328p-5v-16m-micro-controller-board-module-for-arduino-ky64_p0256.html)
@@ -50,6 +53,7 @@ This is a guide to create a beautiful arduino based thundercloud with an externa
 - needle and thread
 
 ---
+
 
 ## Assembly
 
@@ -89,6 +93,7 @@ This is a guide to create a beautiful arduino based thundercloud with an externa
 
 ---
 
+
 ### Helpful links
 
 - [Arduino Nano Pinout](http://www.pighixxx.com/test/pinouts/boards/nano.pdf)
@@ -99,4 +104,4 @@ This is a guide to create a beautiful arduino based thundercloud with an externa
 
 A big shout out to Richard Clarkson for his inspiring work!
 
-![thundercloud](img/original_clarkson.gif)
+[![thundercloud](img/original_clarkson.gif)](https://www.richardclarkson.com/cloud/)
