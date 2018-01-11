@@ -1,4 +1,4 @@
-## Welcome to GitHub Pages
+## DIY arduino thundercloud
 
 You can use the [editor on GitHub](https://github.com/gnihi/thundercloud/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
 
