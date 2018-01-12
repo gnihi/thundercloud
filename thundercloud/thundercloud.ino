@@ -20,11 +20,11 @@ double MIN_INTENSITY = 0.1;             // Min output intensity
 double MAX_INTENSITY = 1.0;             // Max output intensity
 
 // MISC
-int CLOUD_MODE = 0;                     // 0 = All on; 1 = Thunder color 1; 2 = Thunder color 2; 3 = Party
+int CLOUD_MODE = 1;                     // 0 = All on; 1 = Thunder color 1; 2 = Thunder color 2; 3 = Party
 int CLOUD_MODE_MAX = 4;                 // Max number of modes
 
 int COUNTER = 0;                        // Counter for decreasing max value
-int INPUT_MAX_NORMALIZE_CHECK = 100;    // Time to check decrease input max value
+int INPUT_MAX_NORMALIZE_CHECK = 500;    // Time to check decrease input max value
 int LAST_STRIKE = 0;                    // Time of last lightning strike
 int BUTTON_RELEASE = 500;               // Time to release button before next possible activation
 boolean BUTTON_PRESSED = false;         // Bool to prevent multiple button activations
@@ -70,13 +70,13 @@ void loop() {
   COUNTER++;
 
   // Normalize input max average every INPUT_MAX_NORMALIZE_CHECK if there wasn't a strike within the last loops
-  if (COUNTER % INPUT_MAX_NORMALIZE_CHECK == 0 && COUNTER - INPUT_MAX_NORMALIZE_CHECK < LAST_STRIKE) {
+  if (COUNTER % INPUT_MAX_NORMALIZE_CHECK == 0 && (COUNTER - INPUT_MAX_NORMALIZE_CHECK) > LAST_STRIKE) {
     normalizeInputMaxAverage();
   }
 
   // Check for a button press
   if (buttonInput && BUTTON_PRESSED == false) {
-    changeMode();
+    return changeMode();
   }
 
   // Collect signal min and max peaks
@@ -249,6 +249,7 @@ void turnAllPixelsOff() {
 
 void normalizeInputMaxAverage() {
   int maxReadingIndex = 0;
+  double maxSignalSummed = 0;
 
   for (int reading = 0; reading < INPUT_READINGS; reading++) {
     // Save index of the highest input max reading
@@ -259,6 +260,14 @@ void normalizeInputMaxAverage() {
 
   // Decline max peak to average
   INPUT_MAX[maxReadingIndex] = INPUT_MAX_AVERAGE;
+
+  // Create new average input level max
+  for (int reading = 0; reading < INPUT_READINGS; reading++) {
+    maxSignalSummed = maxSignalSummed + INPUT_MAX[reading];
+  }
+
+  // Calculate the average reading
+  INPUT_MAX_AVERAGE = maxSignalSummed / INPUT_READINGS;
 }
 
 // -------------------------------------------------
