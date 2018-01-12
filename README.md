@@ -1,4 +1,4 @@
-## :cloud: Thundercloud :cloud:
+## [:cloud: Thundercloud :cloud:](https://gnihi.github.io/thundercloud/)
 
 This is a guide to create a beautiful arduino based thundercloud with an external sound source to trigger lightning.
 
@@ -7,7 +7,6 @@ This is a guide to create a beautiful arduino based thundercloud with an externa
 
 ---
 
-&nbsp;
 ## Breadboard and schematic
 
 [![thundercloud](img/breadboard.png)](img/large/breadboard_large.png)
@@ -16,13 +15,10 @@ This is a guide to create a beautiful arduino based thundercloud with an externa
 
 ---
 
-&nbsp;
 ## BOM - Bill of material
 
 	This setup uses a 12v power supply to power a 12v led stipe!
 	If you want to use a 5v neopixel you can remove the step up converter of the shopping list. 
-
-&nbsp;
 
 - 1x micro controller 5v-12v
 	- [Arduino Nano](https://store.arduino.cc/arduino-nano) or something similar like the [Kuman Mini Nano](http://www.kumantech.com/kuman-mini-nano-v30-atmega328p-5v-16m-micro-controller-board-module-for-arduino-ky64_p0256.html)
@@ -55,7 +51,6 @@ This is a guide to create a beautiful arduino based thundercloud with an externa
 
 ---
 
-&nbsp;
 ## Assembly
 
 1. Gather all materials and parts.
@@ -94,14 +89,12 @@ This is a guide to create a beautiful arduino based thundercloud with an externa
 
 ---
 
-&nbsp;
 ### Helpful links
 
 - [Arduino Nano Pinout](http://www.pighixxx.com/test/pinouts/boards/nano.pdf)
 - [Adafruit NeoPixel uberguide](https://learn.adafruit.com/adafruit-neopixel-uberguide/basic-connections)
 - [Measuring sould levels](https://learn.adafruit.com/adafruit-microphone-amplifier-breakout/measuring-sound-levels)
 
-&nbsp;
 ---
 
 A big shout out to Richard Clarkson for his inspiring work!
