@@ -1,4 +1,6 @@
+#include <TimeOut.h>
 #include <Adafruit_NeoPixel.h>
+#include <AltSoftSerial.h>
 
 // PINS
 const int LED_PIN = 6;                  // LED pin on board
@@ -19,6 +21,9 @@ int NUM_LEDS = 75;                      // Number of LEDs on the pixel stripe
 double MIN_INTENSITY = 0.1;             // Min output intensity
 double MAX_INTENSITY = 1.0;             // Max output intensity
 
+// BLUETOOTH
+char COMMAND=' ';
+
 // MISC
 int CLOUD_MODE = 0;                     // 0 = All on; 1 = Thunder color 1; 2 = Thunder color 2; 3 = Party
 int CLOUD_MODE_MAX = 4;                 // Max number of modes
@@ -26,8 +31,6 @@ int CLOUD_MODE_MAX = 4;                 // Max number of modes
 int COUNTER = 0;                        // Counter for decreasing max value
 int INPUT_MAX_NORMALIZE_CHECK = 100;    // Time to check decrease input max value
 int LAST_STRIKE = 0;                    // Time of last lightning strike
-int BUTTON_RELEASE = 500;               // Time to release button before next possible activation
-boolean BUTTON_PRESSED = false;         // Bool to prevent multiple button activations
 
 // Create neopixel stripe
 // Parameter 1 = number of pixels in strip
@@ -38,6 +41,13 @@ boolean BUTTON_PRESSED = false;         // Bool to prevent multiple button activ
 //   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
 //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+// https://www.pjrc.com/teensy/td_libs_AltSoftSerial.html
+AltSoftSerial BTserial; 
+
+// https://github.com/NitrofMtl/TimeOut
+TimeOut lightningTimeout;
+Interval manualLoopInterval;
 
 // -------------------------------------------------
 
@@ -50,6 +60,9 @@ void setup() {
   pinMode(MICRO_PIN, INPUT);
   Serial.begin (9600);
 
+  // Bluetooth
+  BTserial.begin(9600);  
+
   // Button
   pinMode(BUTTON_PIN, INPUT);
   pinMode(BUTTON_5V_PIN, OUTPUT);
@@ -59,24 +72,31 @@ void setup() {
   for (int reading = 0; reading < INPUT_READINGS; reading++) {
     INPUT_MAX[reading] = 0;
   }
+
+  // Start a manual loop to pervent blocking the main loop
+  manualLoopInterval.interval(50, manualLoop);
 }
 
 // -------------------------------------------------
 
 void loop() {
+ 
+  // Read and write bluetooth signals
+  processBluetoothSignals();
+
+  TimeOut::handler();
+  Interval::handler();
+}
+
+// -------------------------------------------------
+void manualLoop(){
   int microSignal = analogRead(MICRO_PIN);
-  boolean buttonInput = digitalRead(BUTTON_PIN);
-
   COUNTER++;
-
+Serial.print("CLOUD_MODE: ");
+Serial.println(CLOUD_MODE);
   // Normalize input max average every INPUT_MAX_NORMALIZE_CHECK if there wasn't a strike within the last loops
   if (COUNTER % INPUT_MAX_NORMALIZE_CHECK == 0 && COUNTER - INPUT_MAX_NORMALIZE_CHECK < LAST_STRIKE) {
     normalizeInputMaxAverage();
-  }
-
-  // Check for a button press
-  if (buttonInput && BUTTON_PRESSED == false) {
-    changeMode();
   }
 
   // Collect signal min and max peaks
@@ -84,15 +104,17 @@ void loop() {
 
   // Let's do some magic!
   run(microSignal);
-
-  delay(1); // delay in between reads for stability
 }
 
-// -------------------------------------------------
 
 void run(int microSignal) {
   double signalIntensity = getSignalIntensity(microSignal);
-
+  
+  //Serial.print("microSignal: ");
+  //Serial.print(microSignal);
+  //Serial.print(", signalIntensity: ");
+  //Serial.println(signalIntensity);
+  
   // All pixels on
   if (CLOUD_MODE == 0) {
     long color[3] = {255, 225, 220};
@@ -120,6 +142,29 @@ void run(int microSignal) {
     long color[3] = {random(0, 255), random(0, 255), random(0, 255)};
     double randomIntensity = random(0, 100) / 100.0;
     lightningStrike(random(NUM_LEDS), randomIntensity, color);
+  }
+}
+
+// -------------------------------------------------
+
+void processBluetoothSignals() {
+  // Read from the Bluetooth module and send to the Arduino Serial Monitor
+  if (BTserial.available()) {
+    COMMAND = BTserial.read();
+    Serial.write(COMMAND);
+
+    if (COMMAND == '0'){
+      changeMode(0);
+    }
+    else if (COMMAND == '1'){
+      changeMode(1);
+    }
+    else if (COMMAND == '2'){
+      changeMode(2);
+    }
+    else if (COMMAND == '3'){
+      changeMode(3);
+    }
   }
 }
 
@@ -217,9 +262,7 @@ void lightningStrike(int pixel, double intensity, long color[]) {
   strip.show();
 
   // Let it glow for some time
-  delay(random(100, 500));
-
-  turnAllPixelsOff();
+  lightningTimeout.timeOut(random(100, 500), turnAllPixelsOff);
 }
 
 // -------------------------------------------------
@@ -231,9 +274,8 @@ void turnAllPixelsOn(long color[]) {
 
   for (int i = 0; i < NUM_LEDS; i++) {
     strip.setPixelColor(i, rColor, bColor, gColor);
-    strip.show();
-    delay(50);
   }
+  strip.show();
 }
 
 // -------------------------------------------------
@@ -263,17 +305,12 @@ void normalizeInputMaxAverage() {
 
 // -------------------------------------------------
 
-void changeMode() {
-  BUTTON_PRESSED = true;
-  CLOUD_MODE++;
+void changeMode(int mode) {
+  CLOUD_MODE = mode;
 
-  if (CLOUD_MODE >= CLOUD_MODE_MAX) {
+  if (CLOUD_MODE >= CLOUD_MODE_MAX || CLOUD_MODE < 0) {
     CLOUD_MODE = 0;
   }
 
   turnAllPixelsOff();
-
-  delay(BUTTON_RELEASE);
-
-  BUTTON_PRESSED = false;
 }
