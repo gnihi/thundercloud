@@ -9,12 +9,12 @@
 
 /*
  * Bluetooth signal map
- * 
+ *
  * 0: dark: everything off, reset thresholds
  * 1: light: everything on
  * 2: color 1: custom color lightning
  * 3: color 2: white lightning
- * 4: color 3: red lightning 
+ * 4: color 3: red lightning
  * 5: color 4: green lightning
  * 6: color 5: blue lightning
  * 7: threshold +: increase the threshold
@@ -28,7 +28,7 @@ const boolean IS_DEBUG = false;
 
 // PINS
 const int LED_PIN = 6;                  // LED pin on board
-const int MICRO_PIN = 7;                // Mircophone pin number on board
+const int MICRO_PIN = 7;                // Microphone pin number on board
 const int BUTTON_5V_PIN = 11;           // 5V out pin of the mode button
 const int BUTTON_PIN = 12;              // Data pin of the mode button
 
@@ -105,7 +105,7 @@ void setup() {
   // Initialize all values
   initialize();
 
-  // Start a manual loop to pervent blocking the main loop
+  // Start a manual loop to prevent blocking the main loop
   manualLoopInterval.interval(50, run);
 }
 
@@ -143,7 +143,7 @@ void run() {
     initialize();
   }
 
-  // Light mode - turn all pixels on 
+  // Light mode - turn all pixels on
   else if (CLOUD_MODE == 1) {
     turnAllPixelsOn(LED_COLORS[CLOUD_MODE]);
   }
@@ -161,11 +161,11 @@ void run() {
   }
 
   else if (CLOUD_MODE == 7) {
-    
+
   }
 
   else if (CLOUD_MODE == 8) {
-    
+
   }
 
   // Party mode
