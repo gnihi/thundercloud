@@ -1,6 +1,30 @@
-#include <TimeOut.h>
+// https://learn.adafruit.com/adafruit-neopixel-uberguide/arduino-library-use
 #include <Adafruit_NeoPixel.h>
+// https://www.pjrc.com/teensy/td_libs_AltSoftSerial.html
 #include <AltSoftSerial.h>
+// https://github.com/NitrofMtl/TimeOut
+#include <TimeOut.h>
+
+// -------------------------------------------------
+
+/*
+ * Bluetooth signal map
+ * 
+ * 0: dark: everything off, reset thresholds
+ * 1: light: everything on
+ * 2: color 1: custom color lightning
+ * 3: color 2: white lightning
+ * 4: color 3: red lightning 
+ * 5: color 4: green lightning
+ * 6: color 5: blue lightning
+ * 7: threshold +: increase the threshold
+ * 8: threshold -: decrease the threshold
+ * 9: party mode
+ */
+
+// -------------------------------------------------
+
+const boolean IS_DEBUG = false;
 
 // PINS
 const int LED_PIN = 6;                  // LED pin on board
@@ -9,45 +33,55 @@ const int BUTTON_5V_PIN = 11;           // 5V out pin of the mode button
 const int BUTTON_PIN = 12;              // Data pin of the mode button
 
 // MICROPHONE
-double THRESHOLD = 0.8;                 // Do not set below 0.5 because of noise floor
 const int INPUT_READINGS = 10;          // Number of reading to build an average - Has to be a constant!
-int INPUT_MAX[INPUT_READINGS];          // The readings from the analog input
-int INPUT_MAX_INDEX = -1;               // The index of the current reading, -1 because is incremented before first read
-double INPUT_MAX_AVERAGE = 0;           // The average max input level
-int INPUT_MIN = 1024;
+int VOLTAGE_READINGS[INPUT_READINGS];
+int CURRENT_READING;
+double THRESHOLD;                       // Volt threshold in percent 0 to 100
 
 // LEDs
-int NUM_LEDS = 75;                      // Number of LEDs on the pixel stripe
-double MIN_INTENSITY = 0.1;             // Min output intensity
-double MAX_INTENSITY = 1.0;             // Max output intensity
+const int NUMBER_OF_LEDS = 75;          // Number of LEDs on the pixel stripe
+const long LED_COLORS[][3] = {          // Color map
+  {0, 0, 0},                            // Placeholder
+  {255, 255, 255},                      // White - for all pixels on mode
+  {160, 200, 255},                      // Mode 2: custom color
+  {255, 255, 255},                      // Mode 3: white
+  {255, 0, 0},                          // Mode 4: red
+  {0, 255, 0},                          // Mode 5: green
+  {0, 0, 255}                           // Mode 6: blue
+
+};
+double MAX_INTENSITY;                   // Volt threshold in percent 0 to 100
 
 // BLUETOOTH
-char COMMAND=' ';
+char COMMAND;
 
 // MISC
-int CLOUD_MODE = 0;                     // 0 = All on; 1 = Thunder color 1; 2 = Thunder color 2; 3 = Party
-int CLOUD_MODE_MAX = 4;                 // Max number of modes
+const int CLOUD_MODE_MAX = 9;           // Max number of modes
+int CLOUD_MODE;                         // 0 = All on; 1 = Thunder color 1; 2 = Thunder color 2; 3 = Party
 
-int COUNTER = 0;                        // Counter for decreasing max value
-int INPUT_MAX_NORMALIZE_CHECK = 100;    // Time to check decrease input max value
-int LAST_STRIKE = 0;                    // Time of last lightning strike
-
-// Create neopixel stripe
-// Parameter 1 = number of pixels in strip
-// Parameter 2 = pin number (most are valid)
-// Parameter 3 = pixel type flags, add together as needed:
-//   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
-//   NEO_KHZ400  400 KHz (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
-//   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
-//   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
-
-// https://www.pjrc.com/teensy/td_libs_AltSoftSerial.html
-AltSoftSerial BTserial; 
-
-// https://github.com/NitrofMtl/TimeOut
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUMBER_OF_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+AltSoftSerial BTserial;
 TimeOut lightningTimeout;
 Interval manualLoopInterval;
+
+// -------------------------------------------------
+
+void initialize() {
+  THRESHOLD = 10;
+  CURRENT_READING = 0;
+  MAX_INTENSITY = 0;
+
+  COMMAND = ' ';
+
+  CLOUD_MODE = 1;
+
+  // Set all the input voltage readings to 0
+  for (int reading = 0; reading < INPUT_READINGS; reading++) {
+    VOLTAGE_READINGS[reading] = 0.00;
+  }
+
+  turnAllPixelsOff();
+}
 
 // -------------------------------------------------
 
@@ -61,87 +95,84 @@ void setup() {
   Serial.begin (9600);
 
   // Bluetooth
-  BTserial.begin(9600);  
+  BTserial.begin(9600);
 
   // Button
   pinMode(BUTTON_PIN, INPUT);
   pinMode(BUTTON_5V_PIN, OUTPUT);
   digitalWrite(BUTTON_5V_PIN, true);
 
-  // Initialize all the input max readings to 0
-  for (int reading = 0; reading < INPUT_READINGS; reading++) {
-    INPUT_MAX[reading] = 0;
-  }
+  // Initialize all values
+  initialize();
 
   // Start a manual loop to pervent blocking the main loop
-  manualLoopInterval.interval(50, manualLoop);
+  manualLoopInterval.interval(50, run);
 }
 
 // -------------------------------------------------
 
 void loop() {
- 
-  // Read and write bluetooth signals
   processBluetoothSignals();
 
   TimeOut::handler();
   Interval::handler();
+
+  measureSoundVoltage();
 }
 
 // -------------------------------------------------
-void manualLoop(){
-  int microSignal = analogRead(MICRO_PIN);
-  COUNTER++;
-Serial.print("CLOUD_MODE: ");
-Serial.println(CLOUD_MODE);
-  // Normalize input max average every INPUT_MAX_NORMALIZE_CHECK if there wasn't a strike within the last loops
-  if (COUNTER % INPUT_MAX_NORMALIZE_CHECK == 0 && COUNTER - INPUT_MAX_NORMALIZE_CHECK < LAST_STRIKE) {
-    normalizeInputMaxAverage();
+
+void run() {
+  double signalIntensity = getVoltageAverage();
+  if (signalIntensity > MAX_INTENSITY) {
+    MAX_INTENSITY = signalIntensity;
+  }
+  // Get the ratio between the intensities without the threshold
+  double intensityRatio = (THRESHOLD - signalIntensity) / (THRESHOLD - MAX_INTENSITY);
+
+  if (IS_DEBUG) {
+    Serial.print("signalIntensity: ");
+    Serial.print(signalIntensity);
+    Serial.print("; ");
+    Serial.print("intensityRatio: ");
+    Serial.println(intensityRatio);
   }
 
-  // Collect signal min and max peaks
-  collectPeaks(microSignal);
-
-  // Let's do some magic!
-  run(microSignal);
-}
-
-
-void run(int microSignal) {
-  double signalIntensity = getSignalIntensity(microSignal);
-  
-  //Serial.print("microSignal: ");
-  //Serial.print(microSignal);
-  //Serial.print(", signalIntensity: ");
-  //Serial.println(signalIntensity);
-  
-  // All pixels on
+  // Dark / reset mode
   if (CLOUD_MODE == 0) {
-    long color[3] = {255, 225, 220};
-    turnAllPixelsOn(color);
+    initialize();
   }
 
-  // Color mode 1
+  // Light mode - turn all pixels on 
   else if (CLOUD_MODE == 1) {
+    turnAllPixelsOn(LED_COLORS[CLOUD_MODE]);
+  }
+
+  // Color modes, color is picked out of the LED_COLORS array
+  else if (CLOUD_MODE == 2
+    || CLOUD_MODE == 3
+    || CLOUD_MODE == 4
+    || CLOUD_MODE == 5
+    || CLOUD_MODE == 6
+  ) {
     if (signalIntensity >= THRESHOLD) {
-      long color[3] = {255, 255, 255};
-      lightningStrike(random(NUM_LEDS), getLedIntensity(microSignal), color);
+      lightningStrike(random(NUMBER_OF_LEDS), intensityRatio, LED_COLORS[CLOUD_MODE]);
     }
   }
 
-  // Color mode 2
-  else if (CLOUD_MODE == 2) {
-    if (signalIntensity > THRESHOLD) {
-      long color[3] = {0, 50, 255};
-      lightningStrike(random(NUM_LEDS), getLedIntensity(microSignal), color);
-    }
+  else if (CLOUD_MODE == 7) {
+    
+  }
+
+  else if (CLOUD_MODE == 8) {
+    
   }
 
   // Party mode
-  else if (CLOUD_MODE == 3) {
+  else if (CLOUD_MODE == 9) {
     long color[3] = {random(0, 255), random(0, 255), random(0, 255)};
     double randomIntensity = random(0, 100) / 100.0;
-    lightningStrike(random(NUM_LEDS), randomIntensity, color);
+    lightningStrike(random(NUMBER_OF_LEDS), randomIntensity, color);
   }
 }
 
@@ -151,107 +182,78 @@ void processBluetoothSignals() {
   // Read from the Bluetooth module and send to the Arduino Serial Monitor
   if (BTserial.available()) {
     COMMAND = BTserial.read();
-    Serial.write(COMMAND);
 
-    if (COMMAND == '0'){
-      changeMode(0);
+    if (IS_DEBUG) {
+      Serial.print("bluetooth input: ");
+      Serial.write(COMMAND);
     }
-    else if (COMMAND == '1'){
-      changeMode(1);
-    }
-    else if (COMMAND == '2'){
-      changeMode(2);
-    }
-    else if (COMMAND == '3'){
-      changeMode(3);
-    }
+
+    if (COMMAND == '0') { changeMode(0); }
+    else if (COMMAND == '1') { changeMode(1); }
+    else if (COMMAND == '2') { changeMode(2); }
+    else if (COMMAND == '3') { changeMode(3); }
+    else if (COMMAND == '4') { changeMode(4); }
+    else if (COMMAND == '5') { changeMode(5); }
+    else if (COMMAND == '6') { changeMode(6); }
+    else if (COMMAND == '7') { changeMode(7); }
+    else if (COMMAND == '8') { changeMode(8); }
+    else if (COMMAND == '9') { changeMode(9); }
   }
 }
 
 // -------------------------------------------------
 
-void collectPeaks(int microSignal) {
-  double maxSignalSummed = 0;
+void measureSoundVoltage() {
+  const int sampleWindow = 50;  // Sample window width in mS (50 mS = 20Hz)
+  long startMillis = millis();  // Start of sample window
+  int peakToPeak = 0;           // peak-to-peak level
 
-  if (microSignal > INPUT_MAX_AVERAGE) {
+  int signalMax = 0;
+  int signalMin = 1024;
+  int sample;
 
-    // Check if array index is greater than max input readings
-    if (INPUT_MAX_INDEX >= INPUT_READINGS) {
-      INPUT_MAX_INDEX = 0;
-    }
-    else {
-      INPUT_MAX_INDEX++;
-    }
-
-    // Save micro signal
-    INPUT_MAX[INPUT_MAX_INDEX] = microSignal;
-
-    // Create new average input level max
-    for (int reading = 0; reading < INPUT_READINGS; reading++) {
-      maxSignalSummed = maxSignalSummed + INPUT_MAX[reading];
-    }
-
-    // Calculate the average reading
-    INPUT_MAX_AVERAGE = maxSignalSummed / INPUT_READINGS;
+  // collect data for 50 mS
+  while (millis() - startMillis < sampleWindow)
+  {
+      sample = analogRead(MICRO_PIN);
+      if (sample < 1024)  // toss out spurious readings
+      {
+         if (sample > signalMax)
+         {
+            signalMax = sample;  // save just the max levels
+         }
+         else if (sample < signalMin)
+         {
+            signalMin = sample;  // save just the min levels
+         }
+      }
   }
-  else if (microSignal < INPUT_MIN) {
-    INPUT_MIN = microSignal;  // save just the min levels
+  peakToPeak = signalMax - signalMin;  // max - min = peak-peak amplitude
+  double volts = (peakToPeak * 5.0) / 1024;  // convert to volts;
+  VOLTAGE_READINGS[CURRENT_READING] = (volts / 5) * 100;  // convert to volt percentage
+
+  CURRENT_READING++;
+
+  if (CURRENT_READING > INPUT_READINGS) {
+    CURRENT_READING = 0;
   }
 }
 
 // -------------------------------------------------
 
-double getSignalIntensity(int microSignal) {
-  double peakToPeak = 0;
-  double signalIntensity = 0; // peak-to-peak intensity in percent from 0-1
+double getVoltageAverage() {
+  double average = 0;
 
-  // Slow down the micro signal on its peak
-  if (microSignal > INPUT_MAX_AVERAGE) {
-    microSignal = INPUT_MAX_AVERAGE;
-  }
-
-  peakToPeak = INPUT_MAX_AVERAGE - INPUT_MIN;  // max - min = peak-peak amplitude
-  signalIntensity = (microSignal - INPUT_MIN) / peakToPeak;
-
-  return signalIntensity;
-}
-
-// -------------------------------------------------
-
-double getLedIntensity(int microSignal) {
-  int max_input_last_readings = INPUT_MAX[0];
-  int min_input_last_readings = INPUT_MAX[0];
-
-  // Get highest and lowest value of last max reading
   for (int reading = 0; reading < INPUT_READINGS; reading++) {
-    if (max_input_last_readings < INPUT_MAX[reading]) {
-      max_input_last_readings = INPUT_MAX[reading];
-    }
-
-    if (min_input_last_readings > INPUT_MAX[reading]) {
-      min_input_last_readings = INPUT_MAX[reading];
-    }
+    average = average + VOLTAGE_READINGS[reading];
   }
 
-  // Calculate signal within led intensity range
-  int peakToPeakSignal = max_input_last_readings - min_input_last_readings;
-
-  // If there are no values to calculate return min intensity
-  if (peakToPeakSignal == 0) {
-    return MIN_INTENSITY;
-  }
-
-  double peakToPeakIntensity = MAX_INTENSITY - MIN_INTENSITY;
-  double signal = double(microSignal - min_input_last_readings) / peakToPeakSignal;
-
-  return signal * peakToPeakIntensity;
+  return average / INPUT_READINGS;
 }
 
 // -------------------------------------------------
 
 void lightningStrike(int pixel, double intensity, long color[]) {
-  LAST_STRIKE = COUNTER;
-
   // Create color from intensity [r, g, b]
   int rColor = (int)(color[0] * intensity);
   int gColor = (int)(color[1] * intensity);
@@ -272,16 +274,17 @@ void turnAllPixelsOn(long color[]) {
   int gColor = (int)(color[1]);
   int bColor = (int)(color[2]);
 
-  for (int i = 0; i < NUM_LEDS; i++) {
+  for (int i = 0; i < NUMBER_OF_LEDS; i++) {
     strip.setPixelColor(i, rColor, bColor, gColor);
   }
+
   strip.show();
 }
 
 // -------------------------------------------------
 
 void turnAllPixelsOff() {
-  for (int i = 0; i < NUM_LEDS; i++) {
+  for (int i = 0; i < NUMBER_OF_LEDS; i++) {
     strip.setPixelColor(i, 0);
   }
   strip.show();
@@ -289,28 +292,21 @@ void turnAllPixelsOff() {
 
 // -------------------------------------------------
 
-void normalizeInputMaxAverage() {
-  int maxReadingIndex = 0;
-
-  for (int reading = 0; reading < INPUT_READINGS; reading++) {
-    // Save index of the highest input max reading
-    if (INPUT_MAX[reading] > INPUT_MAX[maxReadingIndex]) {
-      maxReadingIndex = reading;
-    }
-  }
-
-  // Decline max peak to average
-  INPUT_MAX[maxReadingIndex] = INPUT_MAX_AVERAGE;
-}
-
-// -------------------------------------------------
-
 void changeMode(int mode) {
-  CLOUD_MODE = mode;
 
-  if (CLOUD_MODE >= CLOUD_MODE_MAX || CLOUD_MODE < 0) {
-    CLOUD_MODE = 0;
+  if (CLOUD_MODE != mode) {
+    if (IS_DEBUG) {
+      Serial.print("cloud mode: ");
+      Serial.write(mode);
+    }
+
+    CLOUD_MODE = mode;
+
+    if (CLOUD_MODE > CLOUD_MODE_MAX || CLOUD_MODE < 0) {
+      CLOUD_MODE = 0;
+    }
+
+    turnAllPixelsOff();
   }
-
-  turnAllPixelsOff();
 }
+
