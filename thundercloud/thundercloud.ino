@@ -8,23 +8,23 @@
 // -------------------------------------------------
 
 /*
- * Bluetooth signal map
+ * Bluetooth commands
  *
- * 0: dark: everything off, reset thresholds
- * 1: light: everything on
- * 2: color 1: custom color lightning
- * 3: color 2: white lightning
- * 4: color 3: red lightning
- * 5: color 4: green lightning
- * 6: color 5: blue lightning
- * 7: threshold +: increase the threshold
- * 8: threshold -: decrease the threshold
- * 9: party mode
+ * off: everything off, reset thresholds
+ * on: everything on
+ * c0: color 0: custom color lightning
+ * c1: color 1: white lightning
+ * c2: color 2: red lightning
+ * c3: color 3: green lightning
+ * c4: color 4: blue lightning
+ * t0: threshold +: increase the threshold
+ * t1: threshold -: decrease the threshold
+ * party: party mode
  */
 
 // -------------------------------------------------
 
-const boolean IS_DEBUG = false;
+const int DEBUG_LEVEL = 0;              // 0 to 3; 0 = somthing, 2 = everything, 3 = nothing
 
 // PINS
 const int LED_PIN = 6;                  // LED pin on board
@@ -40,24 +40,20 @@ double THRESHOLD;                       // Volt threshold in percent 0 to 100
 
 // LEDs
 const int NUMBER_OF_LEDS = 75;          // Number of LEDs on the pixel stripe
-const long LED_COLORS[][3] = {          // Color map
-  {0, 0, 0},                            // Placeholder
-  {255, 255, 255},                      // White - for all pixels on mode
-  {160, 200, 255},                      // Mode 2: custom color
-  {255, 255, 255},                      // Mode 3: white
-  {255, 0, 0},                          // Mode 4: red
-  {0, 255, 0},                          // Mode 5: green
-  {0, 0, 255}                           // Mode 6: blue
-
+const long LED_COLORS[5][3] = {          // Color map
+  {160, 200, 255},                      // Color 0: custom color
+  {255, 255, 255},                      // Color 1: white
+  {255, 0, 0},                          // Color 2: red
+  {0, 255, 0},                          // Color 3: green
+  {0, 0, 255}                           // Color 4: blue
 };
 double MAX_INTENSITY;                   // Volt threshold in percent 0 to 100
 
 // BLUETOOTH
-char COMMAND;
+String COMMAND;                         // Bluetooth input command, multiple collected chars
 
 // MISC
-const int CLOUD_MODE_MAX = 9;           // Max number of modes
-int CLOUD_MODE;                         // 0 = All on; 1 = Thunder color 1; 2 = Thunder color 2; 3 = Party
+String CLOUD_MODE;                      // Current  cloud mode
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUMBER_OF_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 AltSoftSerial BTserial;
@@ -67,13 +63,12 @@ Interval manualLoopInterval;
 // -------------------------------------------------
 
 void initialize() {
+  CLOUD_MODE = "off";
+  
   THRESHOLD = 10;
   CURRENT_READING = 0;
   MAX_INTENSITY = 0;
 
-  COMMAND = ' ';
-
-  CLOUD_MODE = 1;
 
   // Set all the input voltage readings to 0
   for (int reading = 0; reading < INPUT_READINGS; reading++) {
@@ -86,6 +81,8 @@ void initialize() {
 // -------------------------------------------------
 
 void setup() {
+  Serial.println("Debug level: " + String(DEBUG_LEVEL));
+
   // Neopixel setup
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
@@ -104,6 +101,7 @@ void setup() {
 
   // Initialize all values
   initialize();
+  turnAllPixelsOn();
 
   // Start a manual loop to prevent blocking the main loop
   manualLoopInterval.interval(50, run);
@@ -112,12 +110,19 @@ void setup() {
 // -------------------------------------------------
 
 void loop() {
+  if (COMMAND == "c1") { changeMode(COMMAND); }
+  else if (COMMAND == "c2") { changeMode(COMMAND); }
+  else if (COMMAND == "c3") { changeMode(COMMAND); }
+  else if (COMMAND == "c4") { changeMode(COMMAND); }
+  else if (COMMAND == "c5") { changeMode(COMMAND); }
+  else if (COMMAND == "party") { changeMode(COMMAND); }
+  
   processBluetoothSignals();
 
   TimeOut::handler();
   Interval::handler();
 
-  measureSoundVoltage();
+  measureMircophoneVoltage();
 }
 
 // -------------------------------------------------
@@ -129,47 +134,27 @@ void run() {
   }
   // Get the ratio between the intensities without the threshold
   double intensityRatio = (THRESHOLD - signalIntensity) / (THRESHOLD - MAX_INTENSITY);
+  String firstCommandChar = String(CLOUD_MODE.charAt(0));
 
-  if (IS_DEBUG) {
-    Serial.print("signalIntensity: ");
+  if (DEBUG_LEVEL >= 2) {
+    Serial.print("SignalIntensity: ");
     Serial.print(signalIntensity);
     Serial.print("; ");
-    Serial.print("intensityRatio: ");
+    Serial.print("IntensityRatio: ");
     Serial.println(intensityRatio);
   }
 
-  // Dark / reset mode
-  if (CLOUD_MODE == 0) {
-    initialize();
-  }
-
-  // Light mode - turn all pixels on
-  else if (CLOUD_MODE == 1) {
-    turnAllPixelsOn(LED_COLORS[CLOUD_MODE]);
-  }
-
   // Color modes, color is picked out of the LED_COLORS array
-  else if (CLOUD_MODE == 2
-    || CLOUD_MODE == 3
-    || CLOUD_MODE == 4
-    || CLOUD_MODE == 5
-    || CLOUD_MODE == 6
-  ) {
+  if (firstCommandChar == "c") {
     if (signalIntensity >= THRESHOLD) {
-      lightningStrike(random(NUMBER_OF_LEDS), intensityRatio, LED_COLORS[CLOUD_MODE]);
+      int colorIndex = String(CLOUD_MODE.charAt(1)).toInt();
+      
+      lightningStrike(random(NUMBER_OF_LEDS), intensityRatio, LED_COLORS[colorIndex]);
     }
   }
 
-  else if (CLOUD_MODE == 7) {
-
-  }
-
-  else if (CLOUD_MODE == 8) {
-
-  }
-
   // Party mode
-  else if (CLOUD_MODE == 9) {
+  else if (CLOUD_MODE == "party") {
     long color[3] = {random(0, 255), random(0, 255), random(0, 255)};
     double randomIntensity = random(0, 100) / 100.0;
     lightningStrike(random(NUMBER_OF_LEDS), randomIntensity, color);
@@ -178,32 +163,57 @@ void run() {
 
 // -------------------------------------------------
 
-void processBluetoothSignals() {
-  // Read from the Bluetooth module and send to the Arduino Serial Monitor
-  if (BTserial.available()) {
-    COMMAND = BTserial.read();
+void runOnCommandChanged(String command) {
+  String firstCommandChar = String(command.charAt(0));
+  
+  // Dark / reset mode
+  if (command == "off") {
+    initialize();
+  }
 
-    if (IS_DEBUG) {
-      Serial.print("bluetooth input: ");
-      Serial.write(COMMAND);
-    }
+  // Light mode - turn all pixels on
+  else if (command == "on") {
+    turnAllPixelsOn();
+  }
+  
+  else if (firstCommandChar == "t") {
+    Serial.println(String(command.substring(1, 4)));
 
-    if (COMMAND == '0') { changeMode(0); }
-    else if (COMMAND == '1') { changeMode(1); }
-    else if (COMMAND == '2') { changeMode(2); }
-    else if (COMMAND == '3') { changeMode(3); }
-    else if (COMMAND == '4') { changeMode(4); }
-    else if (COMMAND == '5') { changeMode(5); }
-    else if (COMMAND == '6') { changeMode(6); }
-    else if (COMMAND == '7') { changeMode(7); }
-    else if (COMMAND == '8') { changeMode(8); }
-    else if (COMMAND == '9') { changeMode(9); }
+    double newThreshold = String(command.substring(1, 4)).toDouble();
+    updateThreshold(newThreshold);
   }
 }
 
 // -------------------------------------------------
 
-void measureSoundVoltage() {
+void processBluetoothSignals() {
+  
+  // Read from the Bluetooth module and send to the Arduino Serial Monitor
+  if (BTserial.available()) {
+    char cchar = ' ';
+    cchar = BTserial.read();
+
+    // Add char to command except it's the end of the stream
+    if (cchar != '\r' && cchar != '\n') {
+      COMMAND += String(cchar);
+    } 
+    else {
+      if (DEBUG_LEVEL >= 0) {
+        Serial.print("Bluetooth input: ");
+        Serial.print(COMMAND);
+        Serial.println("");
+      }
+
+      runOnCommandChanged(COMMAND);
+
+      COMMAND = "";
+    }
+  }
+}
+
+// -------------------------------------------------
+
+void measureMircophoneVoltage() {
   const int sampleWindow = 50;  // Sample window width in mS (50 mS = 20Hz)
   long startMillis = millis();  // Start of sample window
   int peakToPeak = 0;           // peak-to-peak level
@@ -258,24 +268,38 @@ void lightningStrike(int pixel, double intensity, long color[]) {
   int rColor = (int)(color[0] * intensity);
   int gColor = (int)(color[1] * intensity);
   int bColor = (int)(color[2] * intensity);
+  int duration = random(100, 1000);  
 
   // Light pixel
   strip.setPixelColor(pixel, strip.Color(rColor, bColor, gColor));
   strip.show();
 
+  if (DEBUG_LEVEL >= 1) {
+    Serial.println("Lightning strike: ");
+    Serial.print("pixel: " + (String)pixel + ", ");
+    Serial.print("color rgb: " + (String)rColor + ", " + (String)bColor + ", " +  (String)gColor + ", ");
+    Serial.println("duration: " + (String)duration);
+  }
+
   // Let it glow for some time
-  lightningTimeout.timeOut(random(100, 500), turnAllPixelsOff);
+  lightningTimeout.timeOut(duration, turnAllPixelsOff);
 }
 
 // -------------------------------------------------
 
-void turnAllPixelsOn(long color[]) {
+void turnAllPixelsOn() {
+  long color[] = {255, 255, 255};
+  
   int rColor = (int)(color[0]);
   int gColor = (int)(color[1]);
   int bColor = (int)(color[2]);
 
   for (int i = 0; i < NUMBER_OF_LEDS; i++) {
     strip.setPixelColor(i, rColor, bColor, gColor);
+  }
+
+  if (DEBUG_LEVEL >= 1) {
+    Serial.println("Turn all pixels on");
   }
 
   strip.show();
@@ -287,26 +311,38 @@ void turnAllPixelsOff() {
   for (int i = 0; i < NUMBER_OF_LEDS; i++) {
     strip.setPixelColor(i, 0);
   }
+
+  if (DEBUG_LEVEL >= 1) {
+    Serial.println("Turn all pixels off");
+  }
+  
   strip.show();
 }
 
 // -------------------------------------------------
 
-void changeMode(int mode) {
+void changeMode(String mode) {
 
   if (CLOUD_MODE != mode) {
-    if (IS_DEBUG) {
-      Serial.print("cloud mode: ");
-      Serial.write(mode);
+    if (DEBUG_LEVEL >= 0) {
+      Serial.print("Cloud mode: " + String(mode));
+      Serial.println("");
     }
 
     CLOUD_MODE = mode;
 
-    if (CLOUD_MODE > CLOUD_MODE_MAX || CLOUD_MODE < 0) {
-      CLOUD_MODE = 0;
-    }
-
     turnAllPixelsOff();
   }
 }
+
+// -------------------------------------------------
+
+void updateThreshold(double newThreshold) {
+  THRESHOLD = newThreshold;
+  
+  if (DEBUG_LEVEL >= 0) {
+    Serial.println("Threshold changed: " + String(THRESHOLD));
+  }
+}
+
 
