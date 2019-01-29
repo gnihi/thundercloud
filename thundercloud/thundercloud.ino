@@ -287,20 +287,21 @@ void lightningStrike(int pixel, double intensity, long color[]) {
 
 void turnAllPixelsOn() {
   long color[] = {255, 255, 255};
-
   int rColor = (int)(color[0]);
   int gColor = (int)(color[1]);
   int bColor = (int)(color[2]);
 
   for (int i = 0; i < NUMBER_OF_LEDS; i++) {
     strip.setPixelColor(i, rColor, bColor, gColor);
+    strip.show();
+
+    // Delay for fancy on effect
+    delay(30);
   }
 
   if (DEBUG_LEVEL >= 1) {
     Serial.println("Turn all pixels on");
   }
-
-  strip.show();
 }
 
 // -------------------------------------------------
