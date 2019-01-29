@@ -10,15 +10,16 @@
 /*
  * Bluetooth commands
  *
+ * Single execution
  * off: everything off, reset thresholds
  * on: everything on
- * c0: color 0: custom color lightning
- * c1: color 1: white lightning
- * c2: color 2: red lightning
- * c3: color 3: green lightning
- * c4: color 4: blue lightning
- * t0: threshold +: increase the threshold
- * t1: threshold -: decrease the threshold
+ * tXXX: threshold, value 0 to 100
+ * rXXX: color red, value 0 to 255
+ * gXXX: color green, value 0 to 255
+ * bXXX: color blue, value 0 to 255
+ *
+ * Loop execution
+ * run: lightning mode
  * party: party mode
  */
 
@@ -40,13 +41,7 @@ double THRESHOLD;                       // Volt threshold in percent 0 to 100
 
 // LEDs
 const int NUMBER_OF_LEDS = 75;          // Number of LEDs on the pixel stripe
-const long LED_COLORS[5][3] = {          // Color map
-  {160, 200, 255},                      // Color 0: custom color
-  {255, 255, 255},                      // Color 1: white
-  {255, 0, 0},                          // Color 2: red
-  {0, 255, 0},                          // Color 3: green
-  {0, 0, 255}                           // Color 4: blue
-};
+long LED_COLORS[3];                        // Color for lightning, in rbg
 double MAX_INTENSITY;                   // Volt threshold in percent 0 to 100
 
 // BLUETOOTH
@@ -64,11 +59,14 @@ Interval manualLoopInterval;
 
 void initialize() {
   CLOUD_MODE = "off";
-  
+
+  LED_COLORS[0] = 160;
+  LED_COLORS[1] = 200;
+  LED_COLORS[2] = 255;
+
   THRESHOLD = 10;
   CURRENT_READING = 0;
   MAX_INTENSITY = 0;
-
 
   // Set all the input voltage readings to 0
   for (int reading = 0; reading < INPUT_READINGS; reading++) {
@@ -81,8 +79,6 @@ void initialize() {
 // -------------------------------------------------
 
 void setup() {
-  Serial.println("Debug level: " + String(DEBUG_LEVEL));
-
   // Neopixel setup
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
@@ -105,18 +101,16 @@ void setup() {
 
   // Start a manual loop to prevent blocking the main loop
   manualLoopInterval.interval(50, run);
+
+  Serial.println("Debug level: " + String(DEBUG_LEVEL));
 }
 
 // -------------------------------------------------
 
 void loop() {
-  if (COMMAND == "c1") { changeMode(COMMAND); }
-  else if (COMMAND == "c2") { changeMode(COMMAND); }
-  else if (COMMAND == "c3") { changeMode(COMMAND); }
-  else if (COMMAND == "c4") { changeMode(COMMAND); }
-  else if (COMMAND == "c5") { changeMode(COMMAND); }
+  if (COMMAND == "run") { changeMode(COMMAND); }
   else if (COMMAND == "party") { changeMode(COMMAND); }
-  
+
   processBluetoothSignals();
 
   TimeOut::handler();
@@ -134,7 +128,6 @@ void run() {
   }
   // Get the ratio between the intensities without the threshold
   double intensityRatio = (THRESHOLD - signalIntensity) / (THRESHOLD - MAX_INTENSITY);
-  String firstCommandChar = String(CLOUD_MODE.charAt(0));
 
   if (DEBUG_LEVEL >= 2) {
     Serial.print("SignalIntensity: ");
@@ -144,12 +137,10 @@ void run() {
     Serial.println(intensityRatio);
   }
 
-  // Color modes, color is picked out of the LED_COLORS array
-  if (firstCommandChar == "c") {
+  // Lightning mode, color is picked out of the LED_COLORS
+  if (CLOUD_MODE == "run") {
     if (signalIntensity >= THRESHOLD) {
-      int colorIndex = String(CLOUD_MODE.charAt(1)).toInt();
-      
-      lightningStrike(random(NUMBER_OF_LEDS), intensityRatio, LED_COLORS[colorIndex]);
+      lightningStrike(random(NUMBER_OF_LEDS), intensityRatio, LED_COLORS);
     }
   }
 
@@ -165,7 +156,7 @@ void run() {
 
 void runOnCommandChanged(String command) {
   String firstCommandChar = String(command.charAt(0));
-  
+
   // Dark / reset mode
   if (command == "off") {
     initialize();
@@ -175,10 +166,17 @@ void runOnCommandChanged(String command) {
   else if (command == "on") {
     turnAllPixelsOn();
   }
-  
-  else if (firstCommandChar == "t") {
-    Serial.println(String(command.substring(1, 4)));
 
+  else if (
+    firstCommandChar == "r" ||
+    firstCommandChar == "g" ||
+    firstCommandChar == "b"
+  ) {
+    int colorValue = String(command.substring(1, 4)).toInt();
+    changeCustomColor(firstCommandChar, colorValue);
+  }
+
+  else if (firstCommandChar == "t") {
     double newThreshold = String(command.substring(1, 4)).toDouble();
     updateThreshold(newThreshold);
   }
@@ -187,7 +185,7 @@ void runOnCommandChanged(String command) {
 // -------------------------------------------------
 
 void processBluetoothSignals() {
-  
+
   // Read from the Bluetooth module and send to the Arduino Serial Monitor
   if (BTserial.available()) {
     char cchar = ' ';
@@ -196,9 +194,9 @@ void processBluetoothSignals() {
     // Add char to command except it's the end of the stream
     if (cchar != '\r' && cchar != '\n') {
       COMMAND += String(cchar);
-    } 
+    }
     else {
-      if (DEBUG_LEVEL >= 0) {
+      if (DEBUG_LEVEL >= 1) {
         Serial.print("Bluetooth input: ");
         Serial.print(COMMAND);
         Serial.println("");
@@ -268,7 +266,7 @@ void lightningStrike(int pixel, double intensity, long color[]) {
   int rColor = (int)(color[0] * intensity);
   int gColor = (int)(color[1] * intensity);
   int bColor = (int)(color[2] * intensity);
-  int duration = random(100, 1000);  
+  int duration = random(100, 1000);
 
   // Light pixel
   strip.setPixelColor(pixel, strip.Color(rColor, bColor, gColor));
@@ -289,7 +287,7 @@ void lightningStrike(int pixel, double intensity, long color[]) {
 
 void turnAllPixelsOn() {
   long color[] = {255, 255, 255};
-  
+
   int rColor = (int)(color[0]);
   int gColor = (int)(color[1]);
   int bColor = (int)(color[2]);
@@ -315,7 +313,7 @@ void turnAllPixelsOff() {
   if (DEBUG_LEVEL >= 1) {
     Serial.println("Turn all pixels off");
   }
-  
+
   strip.show();
 }
 
@@ -337,12 +335,32 @@ void changeMode(String mode) {
 
 // -------------------------------------------------
 
+void changeCustomColor(String colorShort, int newColorValue) {
+
+  if (colorShort == "r") {
+    LED_COLORS[0] = newColorValue;
+  }
+  else if (colorShort == "g") {
+    LED_COLORS[1] = newColorValue;
+  }
+  else if (colorShort == "b") {
+    LED_COLORS[2] = newColorValue;
+  }
+
+  if (DEBUG_LEVEL >= 0) {
+    Serial.print("Custom color changed: ");
+    Serial.print("r" + String(LED_COLORS[0]) + ", ");
+    Serial.print("g" + String(LED_COLORS[1]) + ", ");
+    Serial.println("b" + String(LED_COLORS[2]));
+  }
+}
+
+// -------------------------------------------------
+
 void updateThreshold(double newThreshold) {
   THRESHOLD = newThreshold;
-  
+
   if (DEBUG_LEVEL >= 0) {
     Serial.println("Threshold changed: " + String(THRESHOLD));
   }
 }
-
-
