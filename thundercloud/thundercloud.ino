@@ -25,7 +25,7 @@
 
 // -------------------------------------------------
 
-const int DEBUG_LEVEL = 0;              // 0 to 3; 0 = somthing, 2 = everything, 3 = nothing
+const int DEBUG_LEVEL = 1;              // 0 to 3; 0 = somthing, 2 = everything, 3 = nothing
 
 // PINS
 const int LED_PIN = 6;                  // LED pin on board
@@ -58,13 +58,13 @@ Interval manualLoopInterval;
 // -------------------------------------------------
 
 void initialize() {
-  CLOUD_MODE = "off";
+  CLOUD_MODE = "run";
 
   LED_COLORS[0] = 160;
   LED_COLORS[1] = 200;
   LED_COLORS[2] = 255;
 
-  THRESHOLD = 10;
+  THRESHOLD = 3;
   CURRENT_READING = 0;
   MAX_INTENSITY = 0;
 
@@ -97,7 +97,7 @@ void setup() {
 
   // Initialize all values
   initialize();
-  turnAllPixelsOn();
+  if (COMMAND == "on") { turnAllPixelsOn(); }
 
   // Start a manual loop to prevent blocking the main loop
   manualLoopInterval.interval(50, run);
